@@ -1,0 +1,16 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/olivomarco/team-systems-ghas-demo-trivy/vex/2026-11-27",
+  "author": "Security Team",
+  "timestamp": "2026-11-27T12:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": { "name": "CVE-2022-23539" },
+      "products": [ { "@id": "pkg:npm/jsonwebtoken@8.5.1" } ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "jsonwebtoken is declared as a dependency but is never imported by server.js; no tokens are signed or verified with legacy key types."
+    }
+  ]
+}

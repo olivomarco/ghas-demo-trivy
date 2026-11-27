@@ -1,0 +1,7 @@
+# Accepted risks for the container image scan.
+# Every entry MUST have a justification, an owner and an expiry date.
+
+# CVE-2019-8457 – libdb5.3 (Berkeley DB). Debian: "will_not_fix".
+# The app never uses Berkeley DB; package comes from the base image.
+# Owner: platform-team | Review by: 2027-06-30
+CVE-2019-8457 exp:2027-06-30

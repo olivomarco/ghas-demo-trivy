@@ -1,0 +1,65 @@
+name: SBOM (Trivy)
+
+# Generates an SBOM of the container image with Trivy and:
+#   1. Submits it to the GitHub Dependency Graph (dependency submission API),
+#      so the image's npm packages show up in Insights > Dependency graph
+#      and trigger Dependabot alerts.
+#   2. Publishes a CycloneDX SBOM as a workflow artifact.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: trivy-demo-app
+
+jobs:
+  sbom:
+    name: Generate & submit SBOM
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required by the dependency submission API
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Submit image dependencies to the Dependency Graph
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: github
+          output: dependency-results.sbom.json
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          skip-setup-trivy: true
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ github.sha }}
+          path: |
+            sbom.cdx.json
+            dependency-results.sbom.json

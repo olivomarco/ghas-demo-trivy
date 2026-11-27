@@ -1,0 +1,131 @@
+name: Container scan (Trivy)
+
+# Builds the container image and scans it with Trivy:
+#   1. Image vulnerabilities (OS packages + npm libraries)  -> code scanning category "trivy-image"
+#   2. Dockerfile misconfigurations (IaC)                    -> code scanning category "trivy-dockerfile"
+# Results are uploaded as SARIF to GitHub code scanning (Security tab + PR checks).
+# The nightly schedule re-scans the default branch so newly published CVEs
+# raise alerts even when the code has not changed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *" # every night at 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: trivy-demo-app
+  # Severities that are reported to GitHub code scanning
+  TRIVY_SEVERITIES: CRITICAL,HIGH
+
+jobs:
+  image-scan:
+    name: Image vulnerabilities
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+      actions: read # needed for private repositories
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Trivy image scan (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # Apply the OpenVEX document so "not_affected" findings are suppressed
+          TRIVY_VEX: vex.openvex.json
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          scanners: vuln
+          severity: ${{ env.TRIVY_SEVERITIES }}
+          limit-severities-for-sarif: true
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload image results to code scanning
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        if: always()
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Trivy image scan (job summary)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        if: always()
+        env:
+          TRIVY_VEX: vex.openvex.json
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          scanners: vuln
+          severity: ${{ env.TRIVY_SEVERITIES }}
+          trivyignores: .trivyignore
+          format: table
+          output: trivy-image.txt
+          skip-setup-trivy: true
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## 🐳 Trivy image scan – \`${IMAGE_NAME}:${GITHUB_SHA::7}\`"
+            echo ""
+            echo "Severities reported: \`${TRIVY_SEVERITIES}\` · suppressions: \`.trivyignore\`, \`vex.openvex.json\`"
+            echo ""
+            echo '<details><summary>Full report</summary>'
+            echo ""
+            echo '```'
+            head -c 60000 trivy-image.txt
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dockerfile-scan:
+    name: Dockerfile misconfigurations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Trivy config scan (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-dockerfile.sarif
+
+      - name: Upload Dockerfile results to code scanning
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        if: always()
+        with:
+          sarif_file: trivy-dockerfile.sarif
+          category: trivy-dockerfile
