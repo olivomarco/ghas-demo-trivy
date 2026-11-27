@@ -28,6 +28,9 @@ stop new risk from reaching `main`, and keep watching once they're shipped?"*
 - **Merge box:** the merge is **blocked by the ruleset** (code scanning merge protection, `high_or_higher`).
 - Talking points:
   - Only alerts **new to this PR** block it. Existing debt on `main` doesn't stop every PR.
+  - Image npm findings are mapped to changed version lines in `app/package-lock.json`.
+    Raw container paths are outside the PR diff and would not block the merge.
+    OS and bundled npm findings remain visible but are not covered by this source-mapped gate.
   - Two SARIF categories: `trivy-image` (what's inside the image) and `trivy-dockerfile` (how it's built).
   - The job summary has the full Trivy table for developers who don't want to leave the run.
 - Close or leave the PR. *"The gate works. Now, what about the debt already on main?"*
