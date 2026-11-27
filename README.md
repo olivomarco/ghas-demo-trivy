@@ -18,6 +18,7 @@ triage, fix and continuously monitor vulnerabilities inside a **Docker image**.
 | `.github/copilot-instructions.md` | Guidance for Copilot coding agent when it fixes the image |
 | `scripts/setup-repo.sh` | Enables security features and creates the **merge-blocking ruleset** |
 | `scripts/create-demo-pr.sh` | Opens the "bad PR" that adds a CRITICAL vulnerability |
+| `scripts/map-trivy-sarif.py` | Maps image application npm findings to lockfile version lines so GitHub can gate PRs |
 | `docs/DEMO.md` | Step-by-step 30-minute demo script |
 | `docs/solution/` | Reference hardened `Dockerfile` + dependencies (the "after" state) |
 
@@ -36,6 +37,18 @@ triage, fix and continuously monitor vulnerabilities inside a **Docker image**.
 3. Wait for the first **Container scan (Trivy)** and **SBOM (Trivy)** runs on `main` to finish.
    This creates the baseline alerts in the Security tab.
 4. Optional: enable **Copilot coding agent** for the repo so you can assign the fix to Copilot.
+
+### How the PR gate works
+
+Trivy's image SARIF points at files inside the container, not files changed by a PR.
+Before upload, application npm findings are mapped to their installed-version lines in
+`app/package-lock.json`. This lets GitHub's code scanning ruleset block new HIGH/CRITICAL
+alerts on changed dependency lines while keeping the existing baseline visible.
+Base-image findings retain their original locations: they remain visible in code scanning,
+but this source mapping does not provide PR merge protection for OS or bundled npm packages.
+The scan jobs report findings without failing; the **Trivy code scanning check** enforces the gate.
+After installing or changing this mapping, run the scan on `main` to establish the mapped
+baseline before scanning demo PRs.
 
 ## Numbers you can expect (scan date: Nov 2026)
 
